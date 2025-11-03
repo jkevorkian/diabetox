@@ -1,0 +1,39 @@
+Diabetes:
+
+2 tipos:
+ tipo 1: hay poca insulina
+ tipo 2: no funciona la insulina o es insuficiente
+
+La acumulacion de azucar genera los sintomas
+
+Problematicas:
+Gran parte de la poblacion que no sabe que tiene diabetes. Es asintomatica o sintomas vagos, de dificil diagnostico.
+Lo que se hace: se evalua
+Demografics:
+    genero, edad, 
+Historial familiar:
+    problemas cardiacos o hipertension en la familia
+Habitos: IMC, fumador, 
+marcadores especificos de la insulina:
+    (HbA1c, Random Glicose (mg/dL))
+
+
+Desafio: los doctores y dras deben tener un sistema informatico que, basado en las notas tomadas de los medicos, indicar si el paciente puede tener diabetes.
+Entrenar un sistema de IA para esto.
+
+
+Tenemos: 
+    dataset hay notas medicas Labeled con (tiene/no tiene Diabetes)
+    Datasset de prueba (sin labels)
+
+Se pueden usar LLMs livianos (por ej, Qwen/Qwen3-0.6B)
+
+Evaluacion:
+    Van a ver 4 metricas:
+      en Kaggle habilitaron una competicion donde tienen los dataset publicos y privados
+      
+      -40% F1 Score será la metrica en la que se van a basar para elegir al ganador
+      -30% Process Quality: Feature engineering, modelo elegido, codigo reproducible (Clean, documentado y facil de leer)
+      -20% Innovacion y real world impact (si usamos un sistema avanzado). Si se puede dar una interfaz buena, se valora.
+      -10% Presentacion: Claridad, conclusiones y insight, Buen Q&a
+

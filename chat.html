@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebLLM Browser Chat</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    h1 { margin-bottom: 1rem; }
+    #chat {
+      width: 90%;
+      max-width: 600px;
+      height: 60vh;
+      overflow-y: auto;
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      padding: 1rem;
+    }
+    .msg {
+      margin: 0.5rem 0;
+      line-height: 1.4;
+      word-wrap: break-word;
+    }
+    .user { text-align: right; color: #2563eb; }
+    .ai { text-align: left; color: #16a34a; }
+    #input-area {
+      margin-top: 1rem;
+      display: flex;
+      width: 90%;
+      max-width: 600px;
+    }
+    #input {
+      flex: 1;
+      padding: 0.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #ccc;
+    }
+    button {
+      margin-left: 0.5rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 0.5rem;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <h1>💬 WebLLM Chat</h1>
+  <div id="chat"></div>
+  <div id="input-area">
+    <input id="input" type="text" placeholder="Type your message..." />
+    <button id="send">Send</button>
+  </div>
+
+  <script type="module">
+    import { CreateMLCEngine } from "https://esm.run/@mlc-ai/web-llm";
+
+    const chatDiv = document.getElementById("chat");
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+
+    const appendMsg = (role, text) => {
+      const msg = document.createElement("div");
+      msg.className = "msg " + role;
+      msg.textContent = (role === "user" ? "🧑 " : "🤖 ") + text;
+      chatDiv.appendChild(msg);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    };
+
+    const modelName = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC";
+
+    appendMsg("ai", "Loading model, please wait… ⏳");
+
+    const engine = await CreateMLCEngine(modelName, {
+      initProgressCallback: (p) => {
+        chatDiv.lastChild.textContent = `Loading model: ${Math.round(p.progress * 100)}%`;
+      }
+    });
+
+    chatDiv.lastChild.remove();
+    appendMsg("ai", "Model loaded! Ready to chat 🚀");
+
+    let messages = [
+      { role: "system", content: "You are a helpful AI assistant." }
+    ];
+
+    const sendMessage = async () => {
+      const userText = inputEl.value.trim();
+      if (!userText) return;
+      inputEl.value = "";
+      appendMsg("user", userText);
+      sendBtn.disabled = true;
+
+      messages.push({ role: "user", content: userText });
+
+      const reply = await engine.chat.completions.create({ messages });
+      const aiText = reply.choices[0].message.content;
+      messages.push({ role: "assistant", content: aiText });
+      appendMsg("ai", aiText);
+
+      sendBtn.disabled = false;
+    };
+
+    sendBtn.onclick = sendMessage;
+    inputEl.addEventListener("keydown", e => {
+      if (e.key === "Enter") sendMessage();
+    });
+  </script>
+</body>
+</html>

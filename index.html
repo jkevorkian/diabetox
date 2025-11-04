@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Diabetes Extractor & Classifier — Demo</title>
+  <style>
+    /* Minimal modern aesthetic */
+    :root{
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa7b2;
+      --accent:#6ee7b7;
+      --glass: rgba(255,255,255,0.03);
+      --glass-2: rgba(255,255,255,0.02);
+      --glass-border: rgba(255,255,255,0.04);
+      --success: #10b981;
+      --danger: #ef4444;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%;margin:0;background:
+      linear-gradient(180deg,#071121 0%, #071a2a 60%); color:#e6f2f1;}
+    .wrap{max-width:1100px;margin:36px auto;padding:28px;border-radius:14px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
+      box-shadow: 0 10px 30px rgba(2,6,23,0.7); border: 1px solid var(--glass-border);}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:18px;}
+    header h1{margin:0;font-size:20px;letter-spacing:-0.2px;}
+    .row{display:flex;gap:18px;align-items:flex-start;}
+    .col{background:var(--card);border-radius:12px;padding:16px;flex:1;border:1px solid var(--glass-border);}
+    .col.small{flex:0 0 320px;}
+    textarea{width:100%;min-height:140px;background:transparent;border:1px dashed var(--glass-border);
+      padding:12px;border-radius:8px;color:inherit;resize:vertical}
+    input[type="text"], input[type="number"], select{
+      width:100%;padding:10px;border-radius:8px;background:transparent;border:1px solid var(--glass-border);
+      color:inherit;margin-bottom:8px;
+    }
+    button{background:linear-gradient(90deg,var(--accent),#5eead4);border:none;padding:10px 12px;border-radius:10px;
+      color:#002019;font-weight:600;cursor:pointer;}
+    .muted{color:var(--muted);font-size:13px;}
+    table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px;}
+    table th, table td{padding:8px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.03);}
+    .prob-bar{height:12px;border-radius:8px;background:var(--glass-2);overflow:hidden}
+    .prob-fill{height:100%;background:linear-gradient(90deg,var(--accent),#34d399);width:0%}
+    .small-meta{font-size:12px;color:var(--muted);margin-top:6px;}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+    .file-input{display:flex;gap:8px;align-items:center;}
+    .btn-ghost{background:transparent;border:1px solid var(--glass-border);color:var(--muted);padding:8px;border-radius:8px;}
+    .highlight{color:var(--accent);font-weight:600}
+    footer{margin-top:18px;font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;}
+    .chip{background:rgba(255,255,255,0.02);padding:6px 10px;border-radius:999px;border:1px solid var(--glass-border);font-size:13px}
+    .json-pre{white-space:pre-wrap;background:#03141a;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.02);font-size:13px;}
+    .flex-row{display:flex;gap:12px;align-items:center;}
+    .pill{padding:6px 10px;border-radius:999px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03)}
+    .danger{color:var(--danger)}
+    .success{color:var(--success)}
+    @media (max-width:980px){
+      .row{flex-direction:column}
+      .col.small{flex:auto}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div style="width:56px;height:56px;border-radius:12px;background:linear-gradient(180deg,#04232f,#07303a);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent)">D+</div>
+      <div>
+        <h1>Diabetes extractor & classifier (static demo)</h1>
+        <div class="muted">Paste a medical note, load patient JSON, or fetch a patient ID from the API. Extraction → placeholder NN → probability.</div>
+      </div>
+      <div style="margin-left:auto" class="chip">Mode: <span id="modeLabel" style="margin-left:8px" class="pill">LLM fallback enabled</span></div>
+    </header>
+
+    <div class="row">
+      <div class="col small">
+        <h3>Input</h3>
+        <label class="muted">Paste a single medical note</label>
+        <textarea id="mednote" placeholder="Type or paste medical note here..."></textarea>
+
+        <div class="controls">
+          <button id="extractBtn">Extract & Predict</button>
+          <button id="extractLocalBtn" class="btn-ghost">Use rule-based extractor</button>
+        </div>
+
+        <hr style="margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)">
+
+        <div>
+          <label class="muted">Or upload a patients JSON file</label>
+          <div class="file-input">
+            <input id="fileInput" type="file" accept="application/json"/>
+            <button id="loadFileBtn" class="btn-ghost">Load file</button>
+          </div>
+          <div class="small-meta">JSON format: an array of patient objects (see spec below). Example dataset embedded for demo. :contentReference[oaicite:1]{index=1}</div>
+        </div>
+
+        <hr style="margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)">
+
+        <div>
+          <label class="muted">Or fetch patient(s) from API</label>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <input id="apiId" type="number" placeholder="patient id (e.g. 10295)"/>
+            <button id="fetchBtn">Fetch</button>
+          </div>
+          <div class="small-meta">Fetches from: <code>https://api.hackupm2025.workers.dev/api/v1/patients/train/{id}</code></div>
+        </div>
+
+        <hr style="margin:12px 0;border:0;border-top:1px solid rgba(255,255,255,0.02)">
+
+        <div>
+          <label class="muted">Neural net placeholder</label>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="randomizeNN" class="btn-ghost">Randomize weights</button>
+            <button id="viewModelBtn" class="btn-ghost">View NN weights</button>
+            <button id="exportCSV" class="btn-ghost">Export CSV</button>
+          </div>
+          <div class="small-meta">By default the NN has random weights. Replace with trained weights by editing <code>nnWeights</code> in the script.</div>
+        </div>
+      </div>
+
+      <div class="col">
+        <h3>Results</h3>
+        <div id="resultsArea">
+          <div class="muted">No extraction yet — paste a note or load data and click <span class="highlight">Extract & Predict</span>.</div>
+        </div>
+
+        <div id="tableArea" style="margin-top:12px"></div>
+
+        <h4 style="margin-top:12px">Last extracted JSON</h4>
+        <div id="lastJson" class="json-pre">{}</div>
+      </div>
+    </div>
+
+    <footer>
+      <div class="muted">Input → Extractor (LLM/local) → Columns → Placeholder NN → Probability</div>
+      <div class="muted">Spec & CSV export included</div>
+    </footer>
+  </div>
+
+  <script>
+  /*************************************************************************
+   * Data interface spec
+   *
+   * Input (patient object expected in uploaded JSON or fetched from API):
+   * {
+   *   "patient_id": integer,
+   *   "has_diabetes": 0|1,            // optional ground truth if available
+   *   "medical_note": string
+   * }
+   *
+   * Output (extraction result for one patient):
+   * {
+   *   "patient_id": integer,
+   *   "Age": integer | null,
+   *   "Gender": "Male"|"Female"|"other"|null,
+   *   "Hypertension": 0|1|null,
+   *   "Heart Disease": 0|1|null,
+   *   "Smoking History": "never"|"past"|"current"|"not known"|null,
+   *   "BMI": float|null,
+   *   "HbA1c": "Low"|"Normal"|"High"|"Very High"|null,
+   *   "Random Glucose": "Low"|"Normal"|"High"|"Very High"|null,
+   *   "medical_note": string,
+   *   "has_diabetes": 0|1|null,    // original ground truth if available
+   *   "predicted_prob": 0-100      // probability percent from placeholder NN
+   * }
+   *
+   *************************************************************************/
+
+  // --- Demo sample data embedded (your uploaded file) ---
+  const demoPatients = [
+    {
+      "patient_id": 82555,
+      "has_diabetes": 0,
+      "medical_note": "The patient is a 16-year-old female with a BMI of 21.49, non-smoker, and no history of hypertension or heart disease. Her recent HbA1c level is 6.2, and her random glucose measurement is within normal limits. While her current health status appears stable, her HbA1c suggests the need for further evaluation of her metabolic health. I recommend a referral to a specialist for comprehensive assessment and guidance on lifestyle modifications to support her long-term well-being. Continued monitoring and preventive strategies should be emphasized."
+    },
+    {
+      "patient_id": 92299,
+      "has_diabetes": 0,
+      "medical_note": "Subjective: The patient, a 15-year-old female, reports no current symptoms such as chest pain, palpitations, or fatigue. She maintains a non-smoking lifestyle and has no known history of hypertension or heart disease.\n\nObjective: BMI is elevated at 33.62, indicating obesity. Vital signs are within normal limits. Laboratory results show a normal HbA1c, but a random glucose level of 158 mg/dL suggests possible postprandial hyperglycemia.\n\nAssessment: The patient’s obesity and elevated glucose readings warrant attention to lifestyle factors. While her HbA1c is normal, the current glucose level indicates a need for monitoring and potential intervention to reduce future health risks.\n\nPlan: Recommend dietary modifications and increased physical activity. Schedule follow-up to reassess glucose levels and discuss weight management strategies. Consider further evaluation if glucose levels remain elevated."
+    },
+    {
+      "patient_id": 18725,
+      "has_diabetes": 0,
+      "medical_note": "The patient is a 54-year-old male with a BMI of 21.46, currently a smoker. He reports no history of hypertension or heart disease. His recent random glucose level is 145 mg/dL, which warrants further evaluation for potential metabolic concerns. Although his HbA1c is within normal limits, ongoing monitoring and lifestyle modifications, including smoking cessation, are advisable. Consider referral to a specialist for comprehensive cardiovascular risk assessment and to discuss strategies for risk reduction. Close follow-up is recommended to ensure early detection and management of any emerging health issues."
+    },
+    {
+      "patient_id": 52208,
+      "has_diabetes": 1,
+      "medical_note": "The patient is a 54-year-old female with a BMI of 39.12, indicating obesity. She reports no history of hypertension or heart disease and is a non-smoker. Recent assessments show a very high random glucose level and elevated HbA1c, suggesting significant metabolic concerns. While she currently has no diagnosed cardiovascular conditions, her risk factors warrant close monitoring. Lifestyle modifications focusing on weight management and dietary adjustments are recommended. Further evaluation and follow-up testing should be considered to assess her metabolic health and prevent potential complications."
+    },
+    {
+      "patient_id": 2640,
+      "has_diabetes": 0,
+      "medical_note": "**Subjective:**  \nThe patient is a 29-year-old female with a history of smoking, currently not experiencing any symptoms such as chest pain, shortness of breath, or fatigue. She reports no known cardiovascular issues and maintains a BMI of 38.25, indicating obesity.\n\n**Objective:**  \nVital signs are within normal limits. Her BMI classifies her as obese. Laboratory results show an HbA1c of 3.5% and a random glucose of 126 mg/dL. No signs of hypertension or heart disease are noted.\n\n**Assessment:**  \nWhile her current glucose levels are slightly elevated, her HbA1c suggests good long-term glycemic control. Her obesity and past smoking history may increase her risk for cardiovascular disease. Continued monitoring of blood pressure, glucose, and lifestyle modifications are recommended.\n\n**Plan:**  \nEncourage weight management through diet and exercise. Advise smoking cessation support if needed. Schedule regular follow-up to monitor cardiovascular risk factors and consider lifestyle counseling to reduce future health risks."
+    }
+  ];
+
+  // --- State ---
+  let currentDataset = []; // array of input patient objects
+  let extractedResults = []; // array of extraction + predictions
+  let useLLM = true; // try local LLMStudio endpoint by default
+
+  // --- Simple in-browser rule-based extractor (fallback) ---
+  function ruleExtract(medtext){
+    const out = {
+      Age: null, Gender: null, Hypertension: null, "Heart Disease": null,
+      "Smoking History": null, BMI: null, "HbA1c": null, "Random Glucose": null
+    };
+    const t = medtext || "";
+    // Age
+    const ageMatch = t.match(/(\d{1,3})-year-old/);
+    if(ageMatch) out.Age = parseInt(ageMatch[1]);
+
+    // Gender
+    if(/female|woman|she\b/i.test(t)) out.Gender = "Female";
+    else if(/male|man|he\b/i.test(t)) out.Gender = "Male";
+
+    // Hypertension / heart disease
+    if(/\bno history of hypertension|no hypertension\b/i.test(t)) out.Hypertension = 0;
+    else if(/\bhypertension\b|high blood pressure\b/i.test(t)) out.Hypertension = 1;
+
+    if(/\bno history of heart disease|no known heart disease\b/i.test(t)) out["Heart Disease"] = 0;
+    else if(/\bheart disease\b|cardiomyopathy\b|coronary\b/i.test(t)) out["Heart Disease"] = 1;
+
+    // Smoking history
+    if(/\bnon-?smok(er|ing)|never smokes|never smoker\b/i.test(t)) out["Smoking History"] = "never";
+    else if(/\bformer smoker|past smoker|quit smoking\b/i.test(t)) out["Smoking History"] = "past";
+    else if(/\bcurrent smoker|smoker\b/i.test(t)) {
+      // be careful to not match "non-smoker"
+      if(!/\bnon-?smok(er|ing)\b/i.test(t)) out["Smoking History"] = "current";
+    }
+
+    // BMI
+    const bmiMatch = t.match(/BMI(?: is|:)?\s*(\d{1,2}\.\d{1,2}|\d{1,3})/i);
+    if(bmiMatch) out.BMI = parseFloat(bmiMatch[1]);
+
+    // HbA1c numeric
+    let hMatch = t.match(/HbA1c(?: level|:)?\s*([\d\.]+)\s*%?/i);
+    if(hMatch){
+      const val = parseFloat(hMatch[1]);
+      if(!isNaN(val)){
+        if(val < 5.7) out["HbA1c"] = "Normal";
+        else if(val < 6.5) out["HbA1c"] = "High";
+        else out["HbA1c"] = "Very High";
+      }
+    } else {
+      // textual hints
+      if(/\b(elevated|elevat(ed)?)\s+HbA1c\b/i.test(t) || /\bhigh HbA1c\b/i.test(t)) out["HbA1c"]="High";
+      if(/\bvery high HbA1c\b/i.test(t)) out["HbA1c"]="Very High";
+      if(/\blow HbA1c\b|\blow a1c\b/i.test(t)) out["HbA1c"]="Low";
+    }
+
+    // Random glucose numeric (mg/dL)
+    let gMatch = t.match(/random glucose(?: level|)[:\s]*([\d]{2,3})\s*mg\/dL/i)
+              || t.match(/random glucose(?: level|)[:\s]*([\d]{2,3})/i);
+    if(gMatch){
+      const val = parseInt(gMatch[1]);
+      if(!isNaN(val)){
+        if(val < 70) out["Random Glucose"] = "Low";
+        else if(val < 140) out["Random Glucose"] = "Normal";
+        else if(val < 200) out["Random Glucose"] = "High";
+        else out["Random Glucose"] = "Very High";
+      }
+    } else {
+      if(/\bvery high random glucose\b|\bvery high glucose\b/i.test(t)) out["Random Glucose"]="Very High";
+      if(/\bhigh random glucose\b|\bhigh glucose\b/i.test(t)) out["Random Glucose"]="High";
+    }
+
+    // Final fallback defaults: if null keep null
+    return out;
+  }
+
+  // --- Utility: try local LLMStudio endpoint (same as your original python) ---
+  async function callLocalLLM(medtext){
+    // This tries the same endpoint in the original script:
+    const API_URL = "http://localhost:1234/v1/chat/completions";
+    const MODEL_NAME = "qwen/qwen3-4b-2507";
+
+    const instructions = `You are a clinical data extractor.
+Given a patient description, return ONLY a JSON with these fields:
+
+{
+ "Age": integer,
+ "Gender": "Male" or "Female",
+ "Hypertension": 0 or 1,
+ "Heart Disease": 0 or 1,
+ "Smoking History": "never" | "past" | "current" | "not known",
+ "BMI": float,
+ "HbA1c": "Low" | "Normal" | "High" | "Very High",
+ "Random Glucose": "Low" | "Normal" | "High" | "Very High"
+}
+
+Do not add explanations or text outside the JSON.
+`;
+
+    try {
+      const payload = {
+        model: MODEL_NAME,
+        messages: [
+          {role: "system", content: instructions},
+          {role: "user", content: medtext}
+        ],
+        temperature: 0.1
+      };
+      const resp = await fetch(API_URL, {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify(payload),
+        // keep timeout handling on caller side if desired
+      });
+      if(!resp.ok) throw new Error("LLM endpoint returned " + resp.status);
+      const json = await resp.json();
+      // Try common response shape: choices[0].message.content
+      const content = (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content)
+                        || json.choices?.[0]?.text
+                        || json.output;
+      if(!content) throw new Error("No content from LLM");
+      // Some LLMs return text with surrounding explanation; try to extract the JSON block
+      const raw = content.trim();
+      // Attempt to find JSON substring
+      const firstBrace = raw.indexOf('{');
+      const lastBrace = raw.lastIndexOf('}');
+      if(firstBrace >=0 && lastBrace > firstBrace){
+        const jsonText = raw.substring(firstBrace, lastBrace+1);
+        return JSON.parse(jsonText);
+      } else {
+        // fallback: attempt direct parse
+        return JSON.parse(raw);
+      }
+    } catch(e){
+      console.warn("LLM call failed:", e);
+      throw e;
+    }
+  }
+
+  // --- Placeholder NN (simple dense network) ---
+  // Accepts a feature vector mapped from the extracted columns and returns probability 0-1.
+  // You can replace weights with trained ones.
+  const nnConfig = {
+    inputSize: 8,
+    hiddenSize: 12,
+    outputSize: 1
+  };
+
+  // random weights generator
+  function randMatrix(rows, cols){ return Array.from({length:rows}, ()=> Array.from({length:cols}, ()=> (Math.random()*2-1)*0.5)); }
+  function randBias(n){ return Array.from({length:n}, ()=> 0.0); }
+
+  // initialize random placeholder weights
+  let nnWeights = {
+    W1: randMatrix(nnConfig.inputSize, nnConfig.hiddenSize),
+    b1: randBias(nnConfig.hiddenSize),
+    W2: randMatrix(nnConfig.hiddenSize, nnConfig.outputSize),
+    b2: randBias(nnConfig.outputSize)
+  };
+
+  function relu(arr){ return arr.map(v => Math.max(0,v)); }
+  function dot(vec, mat){ // vec: length n, mat: n x m => out length m
+    const out = Array(mat[0].length).fill(0);
+    for(let i=0;i<mat.length;i++){
+      for(let j=0;j<mat[0].length;j++){
+        out[j] += (vec[i]||0) * mat[i][j];
+      }
+    }
+    return out;
+  }
+  function addBias(arr, bias){
+    return arr.map((v,i)=> v + (bias[i]||0));
+  }
+  function sigmoid(arr){ return arr.map(v=> 1/(1+Math.exp(-v))); }
+
+  function featuresFromExtract(ex){
+    // Map to numeric feature vector of fixed order:
+    // [Age (scaled), Gender (0 male 1 female), Hypertension, Heart Disease,
+    //  Smoking (0 never,1 past,2 current,0.5 unknown), BMI (scaled), HbA1c_score, RandomGlucose_score]
+    const f = [];
+    f[0] = (ex.Age ? Math.min(100,ex.Age)/100 : 0.5); // scale age to 0-1
+    f[1] = ex.Gender === "Female" ? 1 : (ex.Gender === "Male" ? 0 : 0.5);
+    f[2] = (ex.Hypertension === 1) ? 1 : (ex.Hypertension === 0 ? 0 : 0);
+    f[3] = (ex["Heart Disease"] === 1) ? 1 : (ex["Heart Disease"] === 0 ? 0 : 0);
+    const smokingMap = {"never":0, "past":1, "current":2, "not known":0.5};
+    f[4] = smokingMap[ex["Smoking History"]] !== undefined ? smokingMap[ex["Smoking History"]] : 0.5;
+    f[5] = ex.BMI ? Math.min(60, ex.BMI)/60 : 0.3;
+    const a1cMap = {"Low":0, "Normal":0.2, "High":0.6, "Very High":1.0};
+    f[6] = a1cMap[ex["HbA1c"]] !== undefined ? a1cMap[ex["HbA1c"]] : 0;
+    const rgMap = {"Low":0, "Normal":0.2, "High":0.6, "Very High":1.0};
+    f[7] = rgMap[ex["Random Glucose"]] !== undefined ? rgMap[ex["Random Glucose"]] : 0;
+    return f;
+  }
+
+  function nnPredict(ex){
+    const x = featuresFromExtract(ex);
+    const h_pre = addBias(dot(x, nnWeights.W1), nnWeights.b1);
+    const h = relu(h_pre);
+    const o_pre = addBias(dot(h, nnWeights.W2), nnWeights.b2);
+    const out = sigmoid(o_pre)[0];
+    return Math.max(0, Math.min(1, out));
+  }
+
+  // --- UI wiring ---
+  const mednoteElem = document.getElementById("mednote");
+  const extractBtn = document.getElementById("extractBtn");
+  const extractLocalBtn = document.getElementById("extractLocalBtn");
+  const resultsArea = document.getElementById("resultsArea");
+  const lastJson = document.getElementById("lastJson");
+  const fileInput = document.getElementById("fileInput");
+  const loadFileBtn = document.getElementById("loadFileBtn");
+  const fetchBtn = document.getElementById("fetchBtn");
+  const apiIdInput = document.getElementById("apiId");
+  const randomizeNN = document.getElementById("randomizeNN");
+  const viewModelBtn = document.getElementById("viewModelBtn");
+  const tableArea = document.getElementById("tableArea");
+  const exportCSV = document.getElementById("exportCSV");
+  const modeLabel = document.getElementById("modeLabel");
+
+  modeLabel.textContent = useLLM ? "LLM fallback enabled" : "LLM disabled";
+
+  // helpers: render result card for one patient
+  function renderResultCard(res){
+    const wrapper = document.createElement("div");
+    wrapper.style.marginTop = "12px";
+    wrapper.style.padding = "12px";
+    wrapper.style.borderRadius = "10px";
+    wrapper.style.background = "linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01))";
+    wrapper.style.border = "1px solid rgba(255,255,255,0.02)";
+    wrapper.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-weight:700">Patient ${res.patient_id ?? "(no id)"} 
+            <span style="font-weight:600;color:var(--muted);font-size:13px">gt: ${res.has_diabetes===1? "1": (res.has_diabetes===0?"0":"n/a")}</span>
+          </div>
+          <div class="muted" style="margin-top:4px">Note snippet: ${escapeHtml((res.medical_note||"").slice(0,220))}${(res.medical_note||"").length>220?"...":""}</div>
+        </div>
+        <div style="min-width:180px;text-align:right">
+          <div style="font-size:12px" class="muted">Diabetes probability</div>
+          <div class="prob-bar" style="margin-top:6px"><div class="prob-fill" style="width:${(res.predicted_prob||0)}%"></div></div>
+          <div style="margin-top:6px;font-weight:700">${(res.predicted_prob||0).toFixed(1)}%</div>
+        </div>
+      </div>
+    `;
+    return wrapper;
+  }
+
+  function escapeHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function renderTable(data){
+    if(!data || data.length===0){ tableArea.innerHTML = "<div class='muted'>No table to show</div>"; return; }
+    const headers = ["patient_id","Age","Gender","Hypertension","Heart Disease","Smoking History","BMI","HbA1c","Random Glucose","has_diabetes","predicted_prob"];
+    let html = '<table><thead><tr>';
+    headers.forEach(h => html += `<th>${h}</th>`);
+    html += '</tr></thead><tbody>';
+    data.forEach(r => {
+      html += '<tr>';
+      headers.forEach(h=>{
+        let v = r[h];
+        if(h==="predicted_prob") v = (v||0).toFixed(1) + "%";
+        html += `<td>${v === undefined || v === null ? "" : escapeHtml(String(v))}</td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    tableArea.innerHTML = html;
+  }
+
+  // main extraction flow for a single note/patient object
+  async function processPatientObject(patientObj, preferRule=false){
+    // patientObj: {patient_id, has_diabetes, medical_note}
+    const medtext = patientObj.medical_note || "";
+    let extracted;
+    // if preferRule true => skip LLM call
+    if(!preferRule && useLLM){
+      try {
+        extracted = await callLocalLLM(medtext);
+      } catch(e){
+        // LLM failed -> fallback to rule
+        extracted = ruleExtract(medtext);
+      }
+    } else {
+      extracted = ruleExtract(medtext);
+    }
+    // ensure expected keys present
+    const out = {
+      patient_id: patientObj.patient_id ?? null,
+      Age: extracted.Age ?? null,
+      Gender: extracted.Gender ?? null,
+      Hypertension: extracted.Hypertension ?? null,
+      "Heart Disease": extracted["Heart Disease"] ?? null,
+      "Smoking History": extracted["Smoking History"] ?? null,
+      BMI: extracted.BMI ?? null,
+      "HbA1c": extracted["HbA1c"] ?? null,
+      "Random Glucose": extracted["Random Glucose"] ?? null,
+      medical_note: medtext,
+      has_diabetes: patientObj.has_diabetes ?? null
+    };
+    // run placeholder NN
+    const prob = nnPredict(out) * 100.0;
+    out.predicted_prob = prob;
+    return out;
+  }
+
+  // process multiple
+  async function processDataset(dataset, preferRule=false){
+    extractedResults = [];
+    for(const p of dataset){
+      try{
+        const r = await processPatientObject(p, preferRule);
+        extractedResults.push(r);
+      } catch(e){
+        console.error("Error processing patient", p, e);
+        extractedResults.push({
+          patient_id: p.patient_id ?? null,
+          medical_note: p.medical_note ?? "",
+          has_diabetes: p.has_diabetes ?? null,
+          predicted_prob: 0
+        });
+      }
+    }
+    // UI update
+    resultsArea.innerHTML = "";
+    extractedResults.slice(0,5).forEach(r=> resultsArea.appendChild(renderResultCard(r)));
+    if(extractedResults.length>5){
+      const more = document.createElement("div");
+      more.className = "muted";
+      more.style.marginTop="8px";
+      more.textContent = `Showing first 5 of ${extractedResults.length} results.`;
+      resultsArea.appendChild(more);
+    }
+    renderTable(extractedResults);
+    lastJson.textContent = JSON.stringify(extractedResults[0] || {}, null, 2);
+  }
+
+  // --- UI events ---
+  extractBtn.addEventListener("click", async ()=>{
+    const text = mednoteElem.value.trim();
+    if(!text){
+      alert("Please paste a medical note or load a patient.");
+      return;
+    }
+    // create a one-item patient object
+    const p = {patient_id: "ad-hoc", medical_note: text};
+    currentDataset = [p];
+    resultsArea.innerHTML = "<div class='muted'>Processing...</div>";
+    await processDataset(currentDataset, false);
+  });
+
+  extractLocalBtn.addEventListener("click", async ()=>{
+    const text = mednoteElem.value.trim();
+    if(!text){
+      alert("Please paste a medical note or load a patient.");
+      return;
+    }
+    const p = {patient_id: "ad-hoc", medical_note: text};
+    currentDataset = [p];
+    resultsArea.innerHTML = "<div class='muted'>Processing (rule-based) ...</div>";
+    await processDataset(currentDataset, true);
+  });
+
+  // load file from disk
+  loadFileBtn.addEventListener("click", async ()=>{
+    const fi = fileInput.files && fileInput.files[0];
+    if(!fi){
+      // As a convenience, if no file chosen — load demo embedded dataset
+      if(confirm("No file selected — load embedded demo dataset instead?")){
+        currentDataset = demoPatients.slice();
+        await processDataset(currentDataset, false);
+      }
+      return;
+    }
+    try{
+      const text = await fi.text();
+      const parsed = JSON.parse(text);
+      if(!Array.isArray(parsed)) throw new Error("Expected an array of patients in JSON file.");
+      currentDataset = parsed;
+      await processDataset(currentDataset, false);
+    }catch(e){
+      alert("Error loading file: " + e.message);
+    }
+  });
+
+  // fetch from your API endpoint by id
+  fetchBtn.addEventListener("click", async ()=>{
+    const id = apiIdInput.value.trim();
+    if(!id){ alert("Enter a patient id to fetch."); return; }
+    const url = `https://api.hackupm2025.workers.dev/api/v1/patients/train/${encodeURIComponent(id)}`;
+    resultsArea.innerHTML = "<div class='muted'>Fetching from API...</div>";
+    try{
+      const resp = await fetch(url);
+      if(!resp.ok) throw new Error("API returned " + resp.status);
+      const data = await resp.json();
+      // Expect either a single patient object or an array
+      let dataset = [];
+      if(Array.isArray(data)) dataset = data;
+      else if(data && typeof data === "object"){
+        dataset = [data];
+      } else {
+        throw new Error("API returned unexpected shape");
+      }
+      currentDataset = dataset;
+      await processDataset(currentDataset, false);
+    }catch(e){
+      resultsArea.innerHTML = "<div class='danger'>Error fetching: " + e.message + "</div>";
+    }
+  });
+
+  randomizeNN.addEventListener("click", ()=>{
+    nnWeights = {
+      W1: randMatrix(nnConfig.inputSize, nnConfig.hiddenSize),
+      b1: randBias(nnConfig.hiddenSize),
+      W2: randMatrix(nnConfig.hiddenSize, nnConfig.outputSize),
+      b2: randBias(nnConfig.outputSize)
+    };
+    alert("Neural net weights randomized (placeholder). Re-run extraction to see new predictions.");
+  });
+
+  viewModelBtn.addEventListener("click", ()=>{
+    const payload = {
+      config: nnConfig,
+      sampleW1: nnWeights.W1.slice(0,3),
+      sampleW2: nnWeights.W2.slice(0,3)
+    };
+    alert("NN weights preview (console). See console for details.");
+    console.log("NN weights preview:", payload);
+  });
+
+  exportCSV.addEventListener("click", ()=>{
+    if(!extractedResults || extractedResults.length===0){ alert("No results to export"); return; }
+    const headers = ["patient_id","Age","Gender","Hypertension","Heart Disease","Smoking History","BMI","HbA1c","Random Glucose","has_diabetes","predicted_prob"];
+    let csv = headers.join(",") + "\n";
+    extractedResults.forEach(r=>{
+      const row = headers.map(h => {
+        let v = r[h];
+        if(v === null || v === undefined) return "";
+        // escape quotes
+        const s = String(v).replace(/"/g,'""');
+        return `"${s}"`;
+      });
+      csv += row.join(",") + "\n";
+    });
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "extracted_patients.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // quick load demo dataset on first load for convenience (comment out if undesired)
+  (async ()=>{
+    // no auto-run; leave blank. If you'd like auto-run, uncomment next lines:
+    // currentDataset = demoPatients.slice();
+    // await processDataset(currentDataset, false);
+  })();
+
+  </script>
+</body>
+</html>

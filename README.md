@@ -2,7 +2,14 @@
  * # Project Documentation
  *
  * ## Overview
- * This proyect aksjlfkjasbvkfjalksfbask
+ * This proyect aids in diabetes detection using AI
+ *
+ * ## Deployment
+ * you need docker installed on the device on which to run the proyect and it should be on windows
+ * run Build docker build -t local-llm-server .
+ * if successful, run docker run -d -p 8000:8000 -v "${PWD}/models:/app/models" local-llm-server
+ * execute notebook cells on diabetox.ipynb in order
+ * Then execute data_cleaning_pre_training, Then training, Then data_cleaning_post_training
  *
  * ## Data Retrieval Process
  * - The application initiates a request to the specified API endpoint and savess iterating along the API response limits.
